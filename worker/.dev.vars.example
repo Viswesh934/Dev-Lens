@@ -1,0 +1,11 @@
+# Worker local development secrets
+# Copy this file to .dev.vars and fill in your values.
+# .dev.vars is gitignored — never commit it.
+
+# Required: OpenRouter API key for the /api/analyze endpoint
+# Get one at https://openrouter.ai/keys
+OPENROUTER_API_KEY=sk-or-v1-your-key-here
+
+# Optional: GitHub token for higher rate limits when re-indexing repositories
+# Generate one at https://github.com/settings/tokens (no scopes needed for public repos)
+GITHUB_TOKEN=ghp_your-token-here

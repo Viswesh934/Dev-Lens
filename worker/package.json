@@ -1,0 +1,15 @@
+{
+  "name": "devlens-worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate": "wrangler d1 migrations apply devlens-db",
+    "db:seed": "wrangler d1 execute devlens-db --file=./migrations/seed.sql"
+  },
+  "devDependencies": {
+    "wrangler": "^4.140.0"
+  }
+}

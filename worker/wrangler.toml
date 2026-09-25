@@ -1,0 +1,11 @@
+name = "devlens-worker"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "devlens-db"
+database_id = "d2c5c3ac-985b-4f32-9568-86903a5f2131"
+
+[dev]
+port = 8787

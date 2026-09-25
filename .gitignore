@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.output/
+
+# Wrangler / Cloudflare
+.wrangler/
+.dev.vars
+*.local
+
+# Environment secrets (use *.example files as templates)
+.env
+.env.*
+!.env.example
+!.dev.vars.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
