@@ -25,16 +25,16 @@ export async function handleRepositories(request, env) {
     let body;
     try { body = await request.json(); } catch { return errorResponse('Invalid JSON body'); }
 
-    const { name, url: repoUrl, description, urls } = body;
+    const { name, url: repoUrl, description, urls, components } = body;
     if (!name || typeof name !== 'string' || !name.trim()) return errorResponse('name is required');
     if (!repoUrl || typeof repoUrl !== 'string' || !repoUrl.trim()) return errorResponse('url is required');
 
     const id = await createRepository(env.DB, name.trim(), repoUrl.trim(), description?.trim() || null);
 
-    // If extra urls were supplied, persist them right away
-    if (Array.isArray(urls) && urls.length > 0) {
-      await updateRepository(env.DB, id, { urls });
-    }
+    const patch = {};
+    if (Array.isArray(urls) && urls.length > 0) patch.urls = urls;
+    if (Array.isArray(components) && components.length > 0) patch.components = components;
+    if (Object.keys(patch).length > 0) await updateRepository(env.DB, id, patch);
 
     const created = await getRepository(env.DB, id);
     return jsonResponse(created, 201);
@@ -47,7 +47,7 @@ export async function handleRepositories(request, env) {
     return jsonResponse(repo);
   }
 
-  // PATCH /api/repositories/:id — update urls and/or developer_notes
+  // PATCH /api/repositories/:id — update urls, components, and/or developer_notes
   if (pathParts.length === 1 && method === 'PATCH') {
     const repo = await getRepository(env.DB, pathParts[0]);
     if (!repo) return notFound('Repository not found');
@@ -59,6 +59,19 @@ export async function handleRepositories(request, env) {
     if ('urls' in body) {
       if (!Array.isArray(body.urls)) return errorResponse('urls must be an array');
       patch.urls = body.urls.map(u => String(u).trim()).filter(Boolean);
+    }
+    if ('components' in body) {
+      if (!Array.isArray(body.components)) return errorResponse('components must be an array');
+      const VALID_ROLES = ['frontend', 'backend', 'worker', 'infra', 'other'];
+      for (const c of body.components) {
+        if (!c.name || !c.url) return errorResponse('each component requires name and url');
+        if (c.role && !VALID_ROLES.includes(c.role)) return errorResponse(`invalid role "${c.role}"`);
+      }
+      patch.components = body.components.map(c => ({
+        name: String(c.name).trim(),
+        role: c.role || 'other',
+        url: String(c.url).trim(),
+      }));
     }
     if ('developer_notes' in body) {
       if (typeof body.developer_notes !== 'string') return errorResponse('developer_notes must be a string');
@@ -75,28 +88,44 @@ export async function handleRepositories(request, env) {
     const repo = await getRepository(env.DB, pathParts[0]);
     if (!repo) return notFound('Repository not found');
 
-    // Index the primary URL plus any additional urls
-    const allUrls = [repo.url, ...(repo.urls || [])].filter(Boolean);
-    const uniqueUrls = [...new Set(allUrls)];
+    // Build URL list — prefer structured components if present, fall back to flat urls
+    let urlsToIndex;
+    if (repo.components && repo.components.length > 0) {
+      // Primary URL is always first; dedupe against component URLs
+      const componentUrls = repo.components.map(c => c.url);
+      const allUrls = [repo.url, ...componentUrls];
+      urlsToIndex = [...new Set(allUrls.filter(Boolean))];
+    } else {
+      const allUrls = [repo.url, ...(repo.urls || [])].filter(Boolean);
+      urlsToIndex = [...new Set(allUrls)];
+    }
 
     try {
       const githubToken = env.GITHUB_TOKEN || null;
 
-      // Index all URLs and merge their contexts
       const contexts = await Promise.all(
-        uniqueUrls.map(u => indexRepository(u, githubToken).catch(err => ({ _error: err.message, url: u })))
+        urlsToIndex.map(u => indexRepository(u, githubToken).catch(err => ({ _error: err.message, url: u })))
       );
 
-      // Primary context is the first (main) URL
       const primary = contexts[0];
       if (primary._error) throw new Error(primary._error);
 
-      // Attach sibling contexts if there are multiple URLs
+      // Attach sibling contexts enriched with component metadata if available
       if (contexts.length > 1) {
-        primary.sibling_repos = contexts.slice(1).map(c => c._error
-          ? { url: c.url, error: c._error }
-          : { url: c.url, name: c.name, description: c.description, primary_languages: c.primary_languages, entry_points: c.entry_points, directory_tree: c.directory_tree }
-        );
+        primary.sibling_repos = contexts.slice(1).map((c, i) => {
+          // i+1 because contexts[0] is primary; map back to components array (index i)
+          const comp = repo.components?.[i] || null;
+          if (c._error) return { url: c.url, error: c._error, ...(comp ? { name: comp.name, role: comp.role } : {}) };
+          return {
+            url: c.url,
+            name: comp?.name || c.name,
+            role: comp?.role || null,
+            description: c.description,
+            primary_languages: c.primary_languages,
+            entry_points: c.entry_points,
+            directory_tree: c.directory_tree,
+          };
+        });
       }
 
       await upsertIndexedContext(env.DB, pathParts[0], primary);
