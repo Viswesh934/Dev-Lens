@@ -35,18 +35,17 @@ export const api = {
 
   // Developer lens
   getDeveloperLens: () => request('GET', '/developer-lens'),
-  saveDeveloperLens: (
-    investigation_style,
-    explanation_style,
-    developer_notes
-  ) =>
-    request('PUT', '/developer-lens', {
-      investigation_style,
-      explanation_style,
-      developer_notes,
-    }),
+  saveDeveloperLens: (investigation_style, explanation_style, developer_notes) =>
+    request('PUT', '/developer-lens', { investigation_style, explanation_style, developer_notes }),
+  shareLens: (label) =>
+    request('POST', '/developer-lens/share', { label }),
+
+  // Shares (public)
+  getShare: (id) => request('GET', `/shares/${id}`),
 
   // Analysis
   analyze: (question, repoId, audience) =>
     request('POST', '/analyze', { question, repoId, audience }),
+  getAnalysisResults: (repoId) =>
+    request('GET', `/analyze?repoId=${repoId}`),
 };
