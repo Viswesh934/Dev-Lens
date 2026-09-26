@@ -4,14 +4,14 @@
 
 export async function getRepositories(db) {
   const { results } = await db.prepare(
-    'SELECT id, name, url, urls, description, developer_notes, indexed_context, created_at, updated_at FROM repositories ORDER BY id ASC'
+    'SELECT id, name, url, urls, components, description, developer_notes, indexed_context, created_at, updated_at FROM repositories ORDER BY id ASC'
   ).all();
   return results.map(parseRepo);
 }
 
 export async function getRepository(db, id) {
   const row = await db.prepare(
-    'SELECT id, name, url, urls, description, developer_notes, indexed_context, created_at, updated_at FROM repositories WHERE id = ?'
+    'SELECT id, name, url, urls, components, description, developer_notes, indexed_context, created_at, updated_at FROM repositories WHERE id = ?'
   ).bind(id).first();
   if (!row) return null;
   return parseRepo(row);
@@ -30,15 +30,19 @@ export async function upsertIndexedContext(db, id, context) {
   ).bind(JSON.stringify(context), id).run();
 }
 
-// Update mutable fields: urls list and/or developer notes.
-// Pass null for a field to leave it unchanged.
-export async function updateRepository(db, id, { urls, developer_notes }) {
+// Update mutable fields: urls, components, and/or developer notes.
+// Pass undefined for a field to leave it unchanged.
+export async function updateRepository(db, id, { urls, components, developer_notes }) {
   const sets = [];
   const binds = [];
 
   if (urls !== undefined) {
     sets.push('urls = ?');
     binds.push(urls === null ? null : JSON.stringify(urls));
+  }
+  if (components !== undefined) {
+    sets.push('components = ?');
+    binds.push(components === null ? null : JSON.stringify(components));
   }
   if (developer_notes !== undefined) {
     sets.push('developer_notes = ?');
@@ -80,12 +84,55 @@ export async function upsertDeveloperLens(db, investigation_style, explanation_s
   }
 }
 
+// ── Analysis Results ──────────────────────────────────────────────────────────
+
+export async function saveAnalysisResult(db, repo_id, question, audience, result) {
+  const res = await db.prepare(
+    "INSERT INTO analysis_results (repo_id, question, audience, result) VALUES (?, ?, ?, ?)"
+  ).bind(repo_id, question, audience, JSON.stringify(result)).run();
+  return res.meta.last_row_id;
+}
+
+export async function getAnalysisResults(db, repo_id) {
+  const { results } = await db.prepare(
+    'SELECT id, repo_id, question, audience, result, created_at FROM analysis_results WHERE repo_id = ? ORDER BY id DESC LIMIT 50'
+  ).bind(repo_id).all();
+  return results.map(r => ({ ...r, result: JSON.parse(r.result) }));
+}
+
+export async function getAllAnalysisResults(db) {
+  const { results } = await db.prepare(
+    'SELECT id, repo_id, question, audience, result, created_at FROM analysis_results ORDER BY id DESC LIMIT 100'
+  ).all();
+  return results.map(r => ({ ...r, result: JSON.parse(r.result) }));
+}
+
+// ── Lens Shares ───────────────────────────────────────────────────────────────
+
+export async function createShare(db, lens_id, label, snapshot) {
+  // Generate a short random slug — 8 hex chars from Math.random, collision probability negligible
+  const id = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
+  await db.prepare(
+    "INSERT INTO lens_shares (id, lens_id, label, snapshot) VALUES (?, ?, ?, ?)"
+  ).bind(id, lens_id, label || null, JSON.stringify(snapshot)).run();
+  return id;
+}
+
+export async function getShare(db, id) {
+  const row = await db.prepare(
+    'SELECT id, lens_id, label, snapshot, created_at FROM lens_shares WHERE id = ?'
+  ).bind(id).first();
+  if (!row) return null;
+  return { ...row, snapshot: JSON.parse(row.snapshot) };
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function parseRepo(row) {
   return {
     ...row,
     urls: row.urls ? JSON.parse(row.urls) : [],
+    components: row.components ? JSON.parse(row.components) : [],
     indexed_context: row.indexed_context ? JSON.parse(row.indexed_context) : null,
   };
 }

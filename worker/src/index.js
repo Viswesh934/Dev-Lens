@@ -3,6 +3,7 @@
 import { handleRepositories } from './routes/repositories.js';
 import { handleDeveloperLens } from './routes/developerLens.js';
 import { handleAnalyze } from './routes/analyze.js';
+import { handleShares } from './routes/shares.js';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -25,10 +26,12 @@ export default {
     try {
       if (path.startsWith('/api/repositories')) {
         response = await handleRepositories(request, env);
-      } else if (path === '/api/developer-lens') {
+      } else if (path.startsWith('/api/developer-lens')) {
         response = await handleDeveloperLens(request, env);
-      } else if (path === '/api/analyze') {
+      } else if (path.startsWith('/api/analyze')) {
         response = await handleAnalyze(request, env);
+      } else if (path.startsWith('/api/shares/')) {
+        response = await handleShares(request, env);
       } else {
         response = new Response(JSON.stringify({ error: 'Not found' }), {
           status: 404,

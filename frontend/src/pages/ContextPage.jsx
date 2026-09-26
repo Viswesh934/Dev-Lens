@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { api } from '../lib/api.js';
 
+const COMPONENT_ROLES = ['frontend', 'backend', 'worker', 'infra', 'other'];
+
 export default function ContextPage({ repositories, selectedRepoId, onSelectRepo, onRepoUpdated, onRepoCreated }) {
   const [indexing, setIndexing] = useState(false);
   const [indexError, setIndexError] = useState(null);
@@ -14,10 +16,11 @@ export default function ContextPage({ repositories, selectedRepoId, onSelectRepo
   const [notesError, setNotesError] = useState(null);
   const [notesValue, setNotesValue] = useState(null); // null = use repo value
 
-  // URL manager state
-  const [urlInput, setUrlInput] = useState('');
-  const [urlSaving, setUrlSaving] = useState(false);
-  const [urlError, setUrlError] = useState(null);
+  // Component manager state — local editable copy
+  const [componentsDraft, setComponentsDraft] = useState(null); // null = use repo value
+  const [compSaving, setCompSaving] = useState(false);
+  const [compSaved, setCompSaved] = useState(false);
+  const [compError, setCompError] = useState(null);
 
   // New repo form state
   const [showNewForm, setShowNewForm] = useState(false);
@@ -31,11 +34,19 @@ export default function ContextPage({ repositories, selectedRepoId, onSelectRepo
   const ctx = repo?.indexed_context;
   const currentNotes = notesValue !== null ? notesValue : (repo?.developer_notes || '');
 
-  // Reset local notes override when switching repos
+  // Use local draft if set, otherwise repo's saved components
+  const currentComponents = componentsDraft !== null
+    ? componentsDraft
+    : (repo?.components || []);
+
+  // Reset local state when switching repos
   function handleSelectRepo(id) {
     setNotesValue(null);
     setNotesSaved(false);
     setNotesError(null);
+    setComponentsDraft(null);
+    setCompSaved(false);
+    setCompError(null);
     onSelectRepo(id);
   }
 
@@ -63,7 +74,7 @@ export default function ContextPage({ repositories, selectedRepoId, onSelectRepo
     try {
       const updated = await api.updateRepository(repo.id, { developer_notes: currentNotes });
       onRepoUpdated(updated);
-      setNotesValue(null); // sync back from source
+      setNotesValue(null);
       setNotesSaved(true);
       setTimeout(() => setNotesSaved(false), 3000);
     } catch (err) {
@@ -73,32 +84,38 @@ export default function ContextPage({ repositories, selectedRepoId, onSelectRepo
     }
   }
 
-  async function handleAddUrl() {
-    const trimmed = urlInput.trim();
-    if (!trimmed || !repo) return;
-    setUrlSaving(true);
-    setUrlError(null);
-    try {
-      const existing = repo.urls || [];
-      if (existing.includes(trimmed)) { setUrlError('Already in list'); setUrlSaving(false); return; }
-      const updated = await api.updateRepository(repo.id, { urls: [...existing, trimmed] });
-      onRepoUpdated(updated);
-      setUrlInput('');
-    } catch (err) {
-      setUrlError(err.message);
-    } finally {
-      setUrlSaving(false);
-    }
+  // ── Component manager helpers ──
+
+  function handleAddComponent() {
+    setComponentsDraft([...currentComponents, { name: '', role: 'frontend', url: '' }]);
   }
 
-  async function handleRemoveUrl(urlToRemove) {
+  function handleUpdateComponent(index, field, value) {
+    const next = currentComponents.map((c, i) => i === index ? { ...c, [field]: value } : c);
+    setComponentsDraft(next);
+  }
+
+  function handleRemoveComponent(index) {
+    setComponentsDraft(currentComponents.filter((_, i) => i !== index));
+  }
+
+  async function handleSaveComponents() {
     if (!repo) return;
+    setCompSaving(true);
+    setCompSaved(false);
+    setCompError(null);
     try {
-      const updated = await api.updateRepository(repo.id, {
-        urls: (repo.urls || []).filter(u => u !== urlToRemove),
-      });
+      const valid = currentComponents.filter(c => c.name.trim() && c.url.trim());
+      const updated = await api.updateRepository(repo.id, { components: valid });
       onRepoUpdated(updated);
-    } catch { /* ignore */ }
+      setComponentsDraft(null);
+      setCompSaved(true);
+      setTimeout(() => setCompSaved(false), 3000);
+    } catch (err) {
+      setCompError(err.message);
+    } finally {
+      setCompSaving(false);
+    }
   }
 
   async function handleCreateRepo() {
@@ -122,7 +139,7 @@ export default function ContextPage({ repositories, selectedRepoId, onSelectRepo
     <div>
       <div className="section">
         <h2>Repository Context</h2>
-        <p>Structured context extracted from the repository. Add connected repos, developer notes, and re-index at any time.</p>
+        <p>Structured context extracted from the repository. Define project components, add developer notes, and re-index at any time.</p>
       </div>
 
       {/* ── Repo selector + new repo ── */}
@@ -173,43 +190,70 @@ export default function ContextPage({ repositories, selectedRepoId, onSelectRepo
 
       {repo && (
         <>
-          {/* ── Connected URLs ── */}
+          {/* ── Component Manager ── */}
           <div className="section">
-            <label className="field-label">Connected Repo URLs</label>
-            <p style={{ fontSize: 12, marginBottom: 8 }}>
-              All URLs in this list are indexed together when you re-index. The primary URL is locked; add sibling repos (e.g. frontend + backend) here.
+            <label className="field-label">Project Components</label>
+            <p style={{ fontSize: 12, marginBottom: 10 }}>
+              Name each service with a role and GitHub URL. Components are indexed together and referenced by name in analysis.
+              The primary URL (<code style={{ fontSize: 11 }}>{repo.url}</code>) is always indexed.
             </p>
 
-            {/* Primary URL (locked) */}
-            <div className="url-row">
-              <span className="url-tag primary">Primary</span>
-              <span className="url-text">{repo.url}</span>
-            </div>
+            {currentComponents.length === 0 && (
+              <div className="notice" style={{ marginBottom: 10, fontSize: 12 }}>
+                No components defined. Add components to give each service a name and role.
+              </div>
+            )}
 
-            {/* Additional URLs */}
-            {(repo.urls || []).map(u => (
-              <div className="url-row" key={u}>
-                <span className="url-tag">Linked</span>
-                <span className="url-text">{u}</span>
-                <button className="url-remove" onClick={() => handleRemoveUrl(u)} title="Remove">✕</button>
+            {currentComponents.map((comp, i) => (
+              <div key={i} className="component-row">
+                <input
+                  type="text"
+                  placeholder="Name (e.g. Frontend)"
+                  value={comp.name}
+                  onChange={e => handleUpdateComponent(i, 'name', e.target.value)}
+                  style={{ flex: '1 1 130px', minWidth: 0 }}
+                />
+                <select
+                  value={comp.role}
+                  onChange={e => handleUpdateComponent(i, 'role', e.target.value)}
+                  style={{ flex: '0 0 120px', width: 120 }}
+                >
+                  {COMPONENT_ROLES.map(r => (
+                    <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  placeholder="https://github.com/owner/repo"
+                  value={comp.url}
+                  onChange={e => handleUpdateComponent(i, 'url', e.target.value)}
+                  style={{ flex: '3 1 260px', minWidth: 0 }}
+                />
+                <button
+                  className="url-remove"
+                  onClick={() => handleRemoveComponent(i)}
+                  title="Remove component"
+                >
+                  ✕
+                </button>
               </div>
             ))}
 
-            {/* Add URL input */}
-            <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'flex-start' }}>
-              <input
-                type="text"
-                placeholder="https://github.com/owner/another-repo"
-                value={urlInput}
-                onChange={e => setUrlInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleAddUrl()}
-                style={{ maxWidth: 380 }}
-              />
-              <button className="btn btn-secondary" onClick={handleAddUrl} disabled={!urlInput.trim() || urlSaving} style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
-                {urlSaving ? '…' : '+ Add URL'}
+            <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button className="btn btn-secondary" onClick={handleAddComponent} style={{ fontSize: 12 }}>
+                + Add Component
               </button>
+              <button
+                className="btn"
+                onClick={handleSaveComponents}
+                disabled={compSaving}
+                style={{ fontSize: 12 }}
+              >
+                {compSaving ? 'Saving…' : 'Save Components'}
+              </button>
+              {compSaved && <span className="save-confirmation">✓ Saved</span>}
+              {compError && <span style={{ fontSize: 12, color: 'var(--red)' }}>{compError}</span>}
             </div>
-            {urlError && <div style={{ fontSize: 12, color: 'var(--red)', marginTop: 4 }}>{urlError}</div>}
           </div>
 
           {/* ── Index action ── */}
@@ -222,9 +266,9 @@ export default function ContextPage({ repositories, selectedRepoId, onSelectRepo
               {indexSuccess && <span className="index-status" style={{ color: 'var(--green)' }}>✓ Indexed successfully.</span>}
               {indexError && <span className="index-status" style={{ color: 'var(--red)' }}>{indexError}</span>}
             </div>
-            {(repo.urls || []).length > 0 && (
+            {currentComponents.length > 0 && (
               <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>
-                Will index {1 + repo.urls.length} connected repo{repo.urls.length > 1 ? 's' : ''}.
+                Will index primary + {currentComponents.length} component{currentComponents.length > 1 ? 's' : ''}.
               </div>
             )}
           </div>
@@ -294,11 +338,14 @@ export default function ContextPage({ repositories, selectedRepoId, onSelectRepo
                 <>
                   <hr className="divider" />
                   <div className="section">
-                    <h3>Connected Repos (indexed together)</h3>
+                    <h3>Indexed Components</h3>
                     <div className="context-grid">
                       {ctx.sibling_repos.map((s, i) => (
                         <div className="context-card" key={i}>
-                          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>{s.name || s.url}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                            <div style={{ fontSize: 12, fontWeight: 700 }}>{s.name || s.url}</div>
+                            {s.role && <span className="tag" style={{ fontSize: 9 }}>{s.role}</span>}
+                          </div>
                           {s.error
                             ? <div style={{ fontSize: 12, color: 'var(--red)' }}>Error: {s.error}</div>
                             : <>

@@ -16,6 +16,13 @@ export default function DeveloperPage() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState(null);
 
+  // Share state
+  const [shareLabel, setShareLabel] = useState('');
+  const [sharing, setSharing] = useState(false);
+  const [shareUrl, setShareUrl] = useState(null);
+  const [shareError, setShareError] = useState(null);
+  const [shareCopied, setShareCopied] = useState(false);
+
   useEffect(() => {
     api.getDeveloperLens()
       .then(lens => {
@@ -42,6 +49,29 @@ export default function DeveloperPage() {
       setError(err.message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleShare() {
+    setSharing(true);
+    setShareError(null);
+    setShareUrl(null);
+    setShareCopied(false);
+    try {
+      const res = await api.shareLens(shareLabel.trim() || null);
+      setShareUrl(res.url);
+      // Copy to clipboard
+      try {
+        await navigator.clipboard.writeText(res.url);
+        setShareCopied(true);
+        setTimeout(() => setShareCopied(false), 4000);
+      } catch {
+        // clipboard may not be available — URL still shown
+      }
+    } catch (err) {
+      setShareError(err.message);
+    } finally {
+      setSharing(false);
     }
   }
 
@@ -104,6 +134,47 @@ export default function DeveloperPage() {
         </button>
         {saved && <span className="save-confirmation">✓ Saved</span>}
         {error && <span style={{ fontSize: 13, color: 'var(--red)' }}>{error}</span>}
+      </div>
+
+      <hr className="divider" style={{ marginTop: 32 }} />
+
+      {/* ── Share Lens ── */}
+      <div className="section">
+        <label className="field-label">Share This Lens</label>
+        <p style={{ fontSize: 12 }}>
+          Publish a read-only snapshot of your lens — investigation style, explanation style, and global notes.
+          Anyone with the link can view it, no login required.
+        </p>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            type="text"
+            placeholder="Optional label (e.g. Q1 2025 Review)"
+            value={shareLabel}
+            onChange={e => setShareLabel(e.target.value)}
+            style={{ maxWidth: 300 }}
+          />
+          <button
+            className="btn btn-secondary"
+            onClick={handleShare}
+            disabled={sharing}
+            style={{ fontSize: 12, whiteSpace: 'nowrap' }}
+          >
+            {sharing ? 'Publishing…' : 'Publish Share Link'}
+          </button>
+        </div>
+
+        {shareUrl && (
+          <div style={{ marginTop: 10 }}>
+            <div className="notice success" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 12, flex: 1, wordBreak: 'break-all' }}>{shareUrl}</span>
+              {shareCopied && <span style={{ fontSize: 11, fontWeight: 700 }}>✓ Copied!</span>}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+              Share this URL with teammates, PMs, or clients. It's a static snapshot — future edits to your lens won't affect it.
+            </div>
+          </div>
+        )}
+        {shareError && <div style={{ fontSize: 12, color: 'var(--red)', marginTop: 6 }}>{shareError}</div>}
       </div>
     </div>
   );

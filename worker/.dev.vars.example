@@ -9,3 +9,12 @@ OPENROUTER_API_KEY=sk-or-v1-your-key-here
 # Optional: GitHub token for higher rate limits when re-indexing repositories
 # Generate one at https://github.com/settings/tokens (no scopes needed for public repos)
 GITHUB_TOKEN=ghp_your-token-here
+
+# Optional: Hugging Face token for Granite evidence validation
+# Get one at https://huggingface.co/settings/tokens (read access is sufficient)
+# Without this, validation will be skipped and the primary analysis still works normally.
+HF_TOKEN=hf_your-token-here
+
+# Optional: Override the Granite model used for evidence validation
+# Default: ibm-granite/granite-3.3-8b-instruct
+# HF_MODEL=ibm-granite/granite-3.3-8b-instruct
