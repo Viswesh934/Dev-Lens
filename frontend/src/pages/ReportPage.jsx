@@ -1,14 +1,6 @@
-// pages/ReportPage.jsx — Report bot: generates a Paprize PDF report from saved analysis results
+// pages/ReportPage.jsx — Report bot: generates a print-ready PDF report from saved analysis results
 
 import { useState, useEffect } from 'react';
-import {
-  ReportRoot,
-  Section,
-  PageHeader,
-  PageFooter,
-  PageContent,
-} from '@paprize/react';
-import { pageSize, pageMargin } from '@paprize/core';
 import { api } from '../lib/api.js';
 
 const RESULT_SECTIONS = [
@@ -74,7 +66,6 @@ export default function ReportPage({ repositories, selectedRepoId, onSelectRepo 
 
   function handlePrint() {
     setPrinting(true);
-    // Small delay so the report renders fully before print dialog
     setTimeout(() => {
       window.print();
       setPrinting(false);
@@ -96,7 +87,7 @@ export default function ReportPage({ repositories, selectedRepoId, onSelectRepo 
     <div>
       <div className="section no-print">
         <h2>Report</h2>
-        <p>Select saved analysis results to include in a paginated PDF report, then generate and print.</p>
+        <p>Select saved analysis results to include in a paginated PDF report, then preview and print.</p>
       </div>
 
       {/* ── Repo selector ── */}
@@ -193,69 +184,74 @@ export default function ReportPage({ repositories, selectedRepoId, onSelectRepo 
         </div>
       )}
 
-      {/* ── Paprize report preview ── */}
+      {/* ── Report preview ── */}
       {showPreview && selected.length > 0 && (
         <div className="report-preview-wrapper">
-          <ReportRoot>
-            <Section size={pageSize.A4} margin={pageMargin.Normal}>
-              <PageHeader>
-                <div className="report-page-header">
-                  <span className="report-logo">Dev<span>Lens</span></span>
-                  <span className="report-repo-name">{selectedRepo?.name}</span>
-                  <span className="report-date">{new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
-                </div>
-              </PageHeader>
+          <div className="report-page">
+            <div className="report-page-header">
+              <span className="report-logo">Dev<span>Lens</span></span>
+              <span className="report-repo-name">{selectedRepo?.name}</span>
+              <span className="report-date">{new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+            </div>
 
-              <PageFooter>
-                <div className="report-page-footer">
-                  DevLens · Analysis Report · {selectedRepo?.name}
-                </div>
-              </PageFooter>
+            <div className="report-cover">
+              <div className="report-cover-title">Analysis Report</div>
+              <div className="report-cover-repo">{selectedRepo?.name}</div>
+              {selectedRepo?.indexed_context?.description && (
+                <div className="report-cover-desc">{selectedRepo.indexed_context.description}</div>
+              )}
+              <div className="report-cover-meta">
+                Generated {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                {' · '}{selected.length} analysis result{selected.length > 1 ? 's' : ''}
+              </div>
+            </div>
 
-              <PageContent>
-                <div className="report-cover">
-                  <div className="report-cover-title">Analysis Report</div>
-                  <div className="report-cover-repo">{selectedRepo?.name}</div>
-                  {selectedRepo?.indexed_context?.description && (
-                    <div className="report-cover-desc">{selectedRepo.indexed_context.description}</div>
-                  )}
-                  <div className="report-cover-meta">
-                    Generated {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-                    {' · '}{selected.length} analysis result{selected.length > 1 ? 's' : ''}
+            {selected.map((r, idx) => {
+              const resObj = r.result?.analysis || r.result || {};
+              const valObj = r.result?.validation || null;
+
+              return (
+                <div key={r.id} className="report-analysis-block">
+                  <div className="report-analysis-question">
+                    {idx + 1}. {r.question}
                   </div>
-                </div>
-              </PageContent>
+                  <div className="report-analysis-meta">
+                    Audience: {r.audience} · {new Date(r.created_at).toLocaleString()}
+                  </div>
 
-              {selected.map((r, idx) => (
-                <PageContent key={r.id}>
-                  <div className="report-analysis-block">
-                    <div className="report-analysis-question">
-                      {idx + 1}. {r.question}
-                    </div>
-                    <div className="report-analysis-meta">
-                      Audience: {r.audience} · {new Date(r.created_at).toLocaleString()}
-                    </div>
-
-                    <div className="report-sections-grid">
-                      {RESULT_SECTIONS.filter(s => s.key !== 'developer_reasoning').map(s => (
-                        <div className="report-section-cell" key={s.key}>
-                          <div className="report-section-label">{s.label}</div>
-                          <div className="report-section-text">{r.result[s.key] || '—'}</div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {r.result.developer_reasoning && (
-                      <div className="report-reasoning">
-                        <div className="report-section-label">Developer Reasoning</div>
-                        <div className="report-section-text">{r.result.developer_reasoning}</div>
+                  <div className="report-sections-grid">
+                    {RESULT_SECTIONS.filter(s => s.key !== 'developer_reasoning').map(s => (
+                      <div className="report-section-cell" key={s.key}>
+                        <div className="report-section-label">{s.label}</div>
+                        <div className="report-section-text">{resObj[s.key] || '—'}</div>
                       </div>
-                    )}
+                    ))}
                   </div>
-                </PageContent>
-              ))}
-            </Section>
-          </ReportRoot>
+
+                  {resObj.developer_reasoning && (
+                    <div className="report-reasoning">
+                      <div className="report-section-label">Developer Reasoning</div>
+                      <div className="report-section-text">{resObj.developer_reasoning}</div>
+                    </div>
+                  )}
+
+                  {valObj && valObj.status === 'completed' && (
+                    <div className="report-validation-summary" style={{ marginTop: 10, padding: '8px 10px', background: '#fcfbf7', border: '1px solid #ddd' }}>
+                      <div className="report-section-label" style={{ color: 'var(--accent)' }}>IBM Granite Validation</div>
+                      <div style={{ fontSize: 11, color: '#444' }}>
+                        Model: {valObj.model || 'Granite 3.3 8B'} · {valObj.claims?.length || 0} claims audited
+                        {valObj.anomalies?.length > 0 && ` · ${valObj.anomalies.length} anomaly detected`}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            <div className="report-page-footer">
+              DevLens · Analysis Report · {selectedRepo?.name}
+            </div>
+          </div>
         </div>
       )}
     </div>

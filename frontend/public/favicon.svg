@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Neo-brutalist background tile with shadow -->
+  <rect x="6" y="6" width="52" height="52" rx="4" fill="#1a1a1a" />
+  <rect x="4" y="4" width="52" height="52" rx="4" fill="#ffd60a" stroke="#1a1a1a" stroke-width="3" />
+  
+  <!-- Magnifying Lens Ring -->
+  <circle cx="28" cy="27" r="14" fill="#ffffff" stroke="#1a1a1a" stroke-width="3.5" />
+  
+  <!-- Lens Accent / Glare -->
+  <path d="M 21 21 A 10 10 0 0 1 35 21" fill="none" stroke="#ff6b35" stroke-width="2.5" stroke-linecap="round" />
+  
+  <!-- Code brackets </> inside the lens -->
+  <path d="M 24 24 L 20 27 L 24 30" fill="none" stroke="#1a1a1a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M 32 24 L 36 27 L 32 30" fill="none" stroke="#1a1a1a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+  
+  <!-- Handle with bold neo-brutalist border -->
+  <line x1="38" y1="37" x2="49" y2="48" stroke="#1a1a1a" stroke-width="6" stroke-linecap="round" />
+  <line x1="38" y1="37" x2="49" y2="48" stroke="#ff6b35" stroke-width="2.5" stroke-linecap="round" />
+</svg>
